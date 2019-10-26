@@ -1,0 +1,56 @@
+#!/usr/bin/env python3
+import configparser
+import sys
+from pathlib import Path
+
+import click
+
+root_dir = Path(__file__).resolve().parent.parent
+
+
+def error(message):
+    print(message, file=sys.stderr)
+    exit(1)
+
+
+@click.group()
+def cli():
+    pass
+
+
+@cli.command()
+@click.argument("name")
+def link(name):
+    """Link a entry to system."""
+    entry_dir = root_dir / name
+    if not entry_dir.exists():
+        error("Entry not exists")
+    config = configparser.ConfigParser()
+    config.read(entry_dir / ".flash")
+    location = config["Entry"]["location"]
+    if location != "~":
+        error("Not implemented")
+
+    dir_items = [path for path in entry_dir.iterdir() if path.name != ".flash"]
+    entry_file: Path = dir_items[0]
+    link = Path.home() / entry_file.name
+    try:
+        link.symlink_to(entry_file.resolve())
+    except FileExistsError:
+        error(f"File `{link}` exists")
+
+
+@cli.command()
+@click.argument("name")
+def unlink(name):
+    """Unlink a entry."""
+
+
+@cli.command()
+def ls():
+    """List all entries."""
+    names = [path.name for path in root_dir.iterdir() if path.is_dir()]
+    print("\t".join(names))
+
+
+cli()
