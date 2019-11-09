@@ -1,0 +1,25 @@
+
+* Entry Metadata
+  #+begin_src toml
+    # simplest
+    [Entry]
+    location = "~"
+
+
+    # Multiple files
+    [Entry]
+    location = "~"
+    files = ["config", "id_ed25519"]
+
+
+    # Multiple files with renaming
+    [Entry]
+    location = "~"
+
+    [[Entry.files]]
+    name = ".zshrc"
+
+    [[Entry.files]]
+    name = "zsh_plugins.txt"
+    rename = ".zsh_plugins.txt"
+  #+end_src

@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
-import configparser
-import sys
 from pathlib import Path
+from typing import List, Union
 
 import click
+import toml
 
 root_dir = Path(__file__).resolve().parent.parent
 
 
 def error(message):
-    print(message, file=sys.stderr)
+    click.secho("ERROR", fg="red", nl=False, err=True)
+    click.echo(f": {message}", err=True)
+    # TODO: More error code
     exit(1)
 
 
@@ -19,25 +21,56 @@ def cli():
 
 
 @cli.command()
+@click.option(
+    "-i", "--interactive", is_flag=True, help="Prompt whether to remove destinations."
+)
 @click.argument("name")
-def link(name):
+def link(name, interactive):
     """Link a entry to system."""
     entry_dir = root_dir / name
     if not entry_dir.exists():
         error("Entry not exists")
-    config = configparser.ConfigParser()
-    config.read(entry_dir / ".flash")
-    location = config["Entry"]["location"]
-    if location != "~":
-        error("Not implemented")
+    with open(entry_dir / ".flash") as f:
+        config = toml.loads(f.read())
 
-    dir_items = [path for path in entry_dir.iterdir() if path.name != ".flash"]
-    entry_file: Path = dir_items[0]
-    link = Path.home() / entry_file.name
-    try:
-        link.symlink_to(entry_file.resolve())
-    except FileExistsError:
-        error(f"File `{link}` exists")
+    location = Path(config["Entry"]["location"]).expanduser()
+    filenames: List[Union(str, dict)] = config["Entry"]["files"]
+
+    if not filenames:
+        dir_items = [path for path in entry_dir.iterdir() if path.name != ".flash"]
+        if len(dir_items) > 0:
+            error(
+                "Multiple files found except the `.flash`. "
+                "You must specify the `files` configuration item."
+            )
+        filenames = [dir_items[0].name]
+
+    links = []
+    for f in filenames:
+        if isinstance(f, str):
+            name, rename = f, f
+        elif "rename" in f:
+            name, rename = f["name"], f["rename"]
+        else:
+            name, rename = f["name"], f["name"]
+
+        link = location / rename
+        entry_item = entry_dir / name
+
+        try:
+            link.symlink_to(entry_item.resolve())
+        except FileExistsError:
+            if not interactive:
+                error(f"File `{link}` exists")
+                # Fallback
+                [link.unlink() for link in links]
+                return
+
+            if click.confirm(f"Replace `{link}`?"):
+                link.unlink()
+                link.symlink_to(entry_item.resolve())
+
+        links.append(link)
 
 
 @cli.command()
