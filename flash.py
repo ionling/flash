@@ -82,8 +82,13 @@ def unlink(name):
 @cli.command()
 def ls():
     """List all entries."""
-    names = [path.name for path in root_dir.iterdir() if path.is_dir()]
+    names = [
+        path.name
+        for path in _root_dir.iterdir()
+        if path.is_dir() and (path / ".flash").exists()
+    ]
     print("\t".join(names))
 
 
-cli()
+if __name__ == "__main__":
+    cli()
