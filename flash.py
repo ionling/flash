@@ -5,7 +5,7 @@ from typing import List, Union
 import click
 import toml
 
-root_dir = Path(__file__).resolve().parent.parent
+_root_dir = Path.cwd()
 
 
 def error(message):
@@ -27,7 +27,7 @@ def cli():
 @click.argument("name")
 def link(name, interactive):
     """Link a entry to system."""
-    entry_dir = root_dir / name
+    entry_dir = _root_dir / name
     if not entry_dir.exists():
         error("Entry not exists")
     with open(entry_dir / ".flash") as f:
@@ -69,6 +69,8 @@ def link(name, interactive):
             if click.confirm(f"Replace `{link}`?"):
                 link.unlink()
                 link.symlink_to(entry_item.resolve())
+        else:
+            print(f"link {entry_item} -> {link}")
 
         links.append(link)
 
