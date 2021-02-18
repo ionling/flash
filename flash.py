@@ -66,12 +66,25 @@ def link(name, interactive):
                 [link.unlink() for link in links]
                 return
 
-            if click.confirm(f"Replace `{link}`?"):
-                link.unlink()
-                link.symlink_to(entry_item.resolve())
-        else:
-            print(f"link {entry_item} -> {link}")
+            if not click.confirm(f"Replace `{link}`?"):
+                continue
 
+            link.unlink()
+            link.symlink_to(entry_item.resolve())
+        except FileNotFoundError:
+            parent = link.parent
+            if not interactive:
+                error(f"Directory `{parent}` not fouond")
+
+            if not click.confirm(f"Create `{parent}`?"):
+                continue
+
+            link.parent.mkdir(parents=True)
+            link.symlink_to(entry_item.resolve())
+        except NotADirectoryError:
+            error(f"Not a directory: {link}")
+
+        print(f"Restore {entry_item} -> {link}")
         links.append(link)
 
 
