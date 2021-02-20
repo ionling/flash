@@ -3,7 +3,7 @@ import setuptools
 
 setuptools.setup(
     name="flash",
-    version="0.1.0",
+    version="0.1.1",
     packages=["."],
     install_requires=["click==7.1.2", "toml==0.10.2"],
     entry_points={"console_scripts": ["flash=flash:cli"]},

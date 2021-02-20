@@ -6,6 +6,7 @@ import click
 import toml
 
 _root_dir = Path.cwd()
+LINK_CONFIG_FILE_NAME = ".flash.toml"
 
 
 def error(message):
@@ -30,17 +31,19 @@ def link(name, interactive):
     entry_dir = _root_dir / name
     if not entry_dir.exists():
         error("Entry not exists")
-    with open(entry_dir / ".flash") as f:
+    with open(entry_dir / LINK_CONFIG_FILE_NAME) as f:
         config = toml.loads(f.read())
 
     location = Path(config["Entry"]["location"]).expanduser()
-    filenames: List[Union(str, dict)] = config["Entry"]["files"]
+    filenames: List[Union[str, dict]] = config["Entry"]["files"]
 
     if not filenames:
-        dir_items = [path for path in entry_dir.iterdir() if path.name != ".flash"]
+        dir_items = [
+            path for path in entry_dir.iterdir() if path.name != LINK_CONFIG_FILE_NAME
+        ]
         if len(dir_items) > 0:
             error(
-                "Multiple files found except the `.flash`. "
+                f"Multiple files found except the `{LINK_CONFIG_FILE_NAME}`. "
                 "You must specify the `files` configuration item."
             )
         filenames = [dir_items[0].name]
@@ -100,7 +103,7 @@ def ls():
     names = [
         path.name
         for path in _root_dir.iterdir()
-        if path.is_dir() and (path / ".flash").exists()
+        if path.is_dir() and (path / LINK_CONFIG_FILE_NAME).exists()
     ]
     print("\t".join(names))
 
