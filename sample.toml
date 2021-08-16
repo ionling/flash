@@ -1,0 +1,22 @@
+# Formated by prettier
+## simplest
+[Entry]
+cmd = "code" # If blank, skip command checking
+install_cmds = ["brew install code", "pacman -S code"]
+location = "~"
+
+## Multiple files
+[Entry]
+location = "~"
+files = ["config", "id_ed25519"]
+
+## Multiple files with renaming
+[Entry]
+location = "~"
+
+[[Entry.files]]
+name = ".zshrc"
+
+[[Entry.files]]
+name = "zsh_plugins.txt"
+rename = ".zsh_plugins.txt"

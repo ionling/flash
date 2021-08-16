@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+import os
 from pathlib import Path
+from shutil import which
 from typing import List, Union
 
 import click
@@ -33,6 +35,14 @@ def link(name, interactive):
         error("Entry not exists")
     with open(entry_dir / LINK_CONFIG_FILE_NAME) as f:
         config = toml.loads(f.read())
+
+    entry = config.get("Entry")
+    if entry == None:
+        raise click.ClickException("Entry section not found in config")
+
+    cmd = entry.get("cmd", "")
+    install_cmds = entry.get("install_cmds", [])
+    cmd_install_command(interactive, cmd, install_cmds)
 
     location = Path(config["Entry"]["location"]).expanduser()
     filenames: List[Union[str, dict]] = config["Entry"]["files"]
@@ -106,6 +116,48 @@ def ls():
         if path.is_dir() and (path / LINK_CONFIG_FILE_NAME).exists()
     ]
     print("\t".join(names))
+
+
+def cmd_install_command(interactive: bool, cmd: str, install_cmds: list[str]):
+    if cmd != "" and not command_exits(cmd):
+        if not interactive:
+            raise click.ClickException(f"Command {cmd} not found")
+
+        if not click.confirm(f"Install {cmd}?", abort=True):
+            pass
+
+        if len(install_cmds) == 0:
+            raise click.ClickException("No install_cmds")
+
+        try:
+            install_command(install_cmds)
+        except Exception as e:
+            raise click.ClickException(str(e))
+
+
+def command_exits(cmd: str) -> bool:
+    return which(cmd) is not None
+
+
+# TODO User personal error type
+def install_command(commands: list[str]):
+    valid_commands = [
+        c
+        for c in commands
+        if (stripped := c.strip()) != "" and command_exits(stripped.split()[0])
+    ]
+    if len(valid_commands) == 0:
+        raise Exception("no valid command")
+
+    installed = False
+    for command in commands:
+        if os.system(command) != 0:
+            continue
+
+        installed = True
+
+    if not installed:
+        raise Exception("install failed")
 
 
 if __name__ == "__main__":
