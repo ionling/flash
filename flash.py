@@ -7,7 +7,7 @@ from typing import List, Union
 import click
 import toml
 
-_root_dir = Path.cwd()
+config_dir = Path(os.environ.get("FLASH_CONFIG_DIR", "."))
 LINK_CONFIG_FILE_NAME = ".flash.toml"
 
 
@@ -30,7 +30,7 @@ def cli():
 @click.argument("name")
 def link(name, interactive):
     """Link a entry to system."""
-    entry_dir = _root_dir / name
+    entry_dir = config_dir / name
     if not entry_dir.exists():
         error("Entry not exists")
     with open(entry_dir / LINK_CONFIG_FILE_NAME) as f:
