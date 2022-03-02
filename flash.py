@@ -18,6 +18,12 @@ def error(message):
     exit(1)
 
 
+def error_msg(message):
+    """Just print message."""
+    click.secho("ERROR", fg="red", nl=False, err=True)
+    click.echo(f": {message}", err=True)
+
+
 @click.group()
 def cli():
     pass
@@ -100,6 +106,8 @@ def link(name, interactive):
         print(f"Restore {entry_item} -> {link}")
         links.append(link)
 
+    do_after_action(config.get("After"))
+
 
 @cli.command()
 @click.argument("name")
@@ -158,6 +166,25 @@ def install_command(commands: list[str]):
 
     if not installed:
         raise Exception("install failed")
+
+
+def do_after_action(action):
+    if action == None:
+        return
+
+    if not click.confirm("Do after action?"):
+        return
+
+    for idx, cmd in enumerate(action.get("cmds", [])):
+        click.echo(f"\nCmd {idx+1}: {cmd}")
+        if not click.confirm("Run?"):
+            continue
+
+        last_waitstatus = os.system(cmd)
+        if last_waitstatus != 0:
+            error_msg(f"Failed")
+
+    exit(os.waitstatus_to_exitcode(last_waitstatus))
 
 
 if __name__ == "__main__":
