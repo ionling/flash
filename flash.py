@@ -42,6 +42,7 @@ def link(name, interactive):
     with open(entry_dir / LINK_CONFIG_FILE_NAME) as f:
         config = toml.loads(f.read())
 
+    handler = LinkHandler(interactive, config)
     entry = config.get("Entry")
     if entry == None:
         raise click.ClickException("Entry section not found in config")
@@ -49,6 +50,7 @@ def link(name, interactive):
     cmd = entry.get("cmd", "")
     install_cmds = entry.get("install_cmds", [])
     cmd_install_command(interactive, cmd, install_cmds)
+    handler.handle_optional_deps()
 
     location = Path(config["Entry"]["location"]).expanduser()
     filenames: List[Union[str, dict]] = config["Entry"]["files"]
@@ -168,6 +170,30 @@ def install_command(commands: list[str]):
         raise Exception("install failed")
 
 
+class LinkHandler:
+    def __init__(self, interactive: bool, config: dict):
+        self.interactive = interactive
+        self.config = config
+        self.step_num = 0
+
+    def step(self, title):
+        self.step_num += 1
+        click.secho(f"STEP {self.step_num}", fg="green", nl=False)
+        click.echo(f": {title}")
+
+    def handle_optional_deps(self):
+        deps = self.config.get("OptionalDeps", [])
+        if len(deps) == 0:
+            return
+
+        self.step("Optional dependencies")
+        for dep in deps:
+            if "cmd" in dep:
+                cmd = dep["cmd"]
+                install_cmds = dep.get("install_cmds", [])
+                cmd_install_command(self.interactive, cmd, install_cmds)
+
+
 def do_after_action(action):
     if action == None:
         return
@@ -175,6 +201,7 @@ def do_after_action(action):
     if not click.confirm("Do after action?"):
         return
 
+    last_waitstatus = 0
     for idx, cmd in enumerate(action.get("cmds", [])):
         click.echo(f"\nCmd {idx+1}: {cmd}")
         if not click.confirm("Run?"):
