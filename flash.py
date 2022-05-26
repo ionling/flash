@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
 import os
+from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
 from typing import List, Union
 
 import click
 import toml
+from click import ClickException
+from dacite import from_dict
 
 config_dir = Path(os.environ.get("FLASH_CONFIG_DIR", "."))
 LINK_CONFIG_FILE_NAME = ".flash.toml"
+
+
+@dataclass
+class ManagerConf:
+    name: str
+    package: str
 
 
 def error(message):
@@ -149,6 +158,37 @@ def command_exits(cmd: str) -> bool:
     return which(cmd) is not None
 
 
+def exec_command(cmd: str) -> int:
+    click.secho(f"RUN", fg="green", nl=False)
+    click.echo(f": {cmd}")
+    return os.system(cmd)
+
+
+def handle_package_managers(managers: list[ManagerConf]):
+    if len(managers) == 0:
+        return
+
+    supported_managers = ["pacman"]
+    if len([m for m in managers if m.name in supported_managers]) == 0:
+        raise Exception("No supported package manager found")
+
+    found_managers = [m for m in managers if command_exits(m.name)]
+    if len(found_managers) == 0:
+        # TODO Support auto install package manager
+        raise Exception("No package manager found")
+
+    for m in found_managers:
+        if m.name == "pacman":
+            cmd = f"sudo {m.name} -S {m.package}"
+        else:
+            continue
+
+        if exec_command(cmd) != 0:
+            error_msg(f"Failed to install {m.package} with {m.name}")
+        else:
+            break
+
+
 # TODO User personal error type
 def install_command(commands: list[str]):
     valid_commands = [
@@ -190,8 +230,17 @@ class LinkHandler:
         for dep in deps:
             if "cmd" in dep:
                 cmd = dep["cmd"]
-                install_cmds = dep.get("install_cmds", [])
-                cmd_install_command(self.interactive, cmd, install_cmds)
+                if "managers" in dep:
+                    managers = [from_dict(ManagerConf, m) for m in dep["managers"]]
+                    try:
+                        handle_package_managers(managers)
+                    except Exception as e:
+                        if not self.interactive:
+                            raise ClickException(e)
+                        error_msg(f"{e}, skip step")
+                else:
+                    install_cmds = dep.get("install_cmds", [])
+                    cmd_install_command(self.interactive, cmd, install_cmds)
 
 
 def do_after_action(action):

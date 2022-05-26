@@ -9,6 +9,7 @@ pytest = "*"
 [packages]
 click = "*"
 toml = "*"
+dacite = "*"
 
 [requires]
 python_version = "3.9"
