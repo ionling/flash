@@ -20,6 +20,19 @@ class ManagerConf:
     package: str
 
 
+def read_config(entry_name) -> dict:
+    entry_dir = config_dir / entry_name
+    if not entry_dir.exists():
+        raise ClickException("Entry not exists")
+
+    config_file = entry_dir / LINK_CONFIG_FILE_NAME
+    if not config_file.exists():
+        raise ClickException("Config file not exists")
+
+    with open(config_file) as f:
+        return toml.loads(f.read())
+
+
 def error(message):
     click.secho("ERROR", fg="red", nl=False, err=True)
     click.echo(f": {message}", err=True)
@@ -45,12 +58,7 @@ def cli():
 @click.argument("name")
 def link(name, interactive):
     """Link a entry to system."""
-    entry_dir = config_dir / name
-    if not entry_dir.exists():
-        error("Entry not exists")
-    with open(entry_dir / LINK_CONFIG_FILE_NAME) as f:
-        config = toml.loads(f.read())
-
+    config = read_config(name)
     handler = LinkHandler(interactive, config)
     entry = config.get("Entry")
     if entry == None:
@@ -261,6 +269,14 @@ def do_after_action(action):
             error_msg(f"Failed")
 
     exit(os.waitstatus_to_exitcode(last_waitstatus))
+
+
+@cli.command()
+@click.argument("name")
+def show(name):
+    """Show entry config."""
+    # pprint() is more compact than json.dumps()
+    pprint.pp(read_config(name))
 
 
 if __name__ == "__main__":
