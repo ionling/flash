@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import os
+import pprint
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
@@ -113,7 +114,7 @@ def link(name, interactive):
         except FileNotFoundError:
             parent = link.parent
             if not interactive:
-                error(f"Directory `{parent}` not fouond")
+                error(f"Directory `{parent}` not found")
 
             if not click.confirm(f"Create `{parent}`?"):
                 continue
@@ -173,11 +174,11 @@ def exec_command(cmd: str) -> int:
     return os.system(cmd)
 
 
-def handle_package_managers(managers: list[ManagerConf]):
+def handle_package_managers(managers: list[ManagerConf], link: bool = True):
     if len(managers) == 0:
         return
 
-    supported_managers = ["pacman"]
+    supported_managers = ["pacman", "yay", "brew"]
     if len([m for m in managers if m.name in supported_managers]) == 0:
         raise Exception("No supported package manager found")
 
@@ -187,8 +188,13 @@ def handle_package_managers(managers: list[ManagerConf]):
         raise Exception("No package manager found")
 
     for m in found_managers:
-        if m.name == "pacman":
-            cmd = f"sudo {m.name} -S {m.package}"
+        if m.name in ["pacman", "yay"]:
+            op = "-S" if link else "-Rs"
+            cmd = f"{m.name} {op} {m.package}"
+            if m.name == "pacman":
+                cmd = f"sudo {cmd}"
+        elif m.name == "brew":
+            cmd = f"{m.name} {'install' if link else 'uninstall'} {m.package}"
         else:
             continue
 
@@ -220,10 +226,11 @@ def install_command(commands: list[str]):
 
 
 class LinkHandler:
-    def __init__(self, interactive: bool, config: dict):
+    def __init__(self, interactive: bool, config: dict, link: bool = True):
         self.interactive = interactive
         self.config = config
         self.step_num = 0
+        self.link = link
 
     def step(self, title):
         self.step_num += 1
@@ -242,7 +249,7 @@ class LinkHandler:
                 if "managers" in dep:
                     managers = [from_dict(ManagerConf, m) for m in dep["managers"]]
                     try:
-                        handle_package_managers(managers)
+                        handle_package_managers(managers, self.link)
                     except Exception as e:
                         if not self.interactive:
                             raise ClickException(e)
