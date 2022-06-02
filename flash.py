@@ -4,7 +4,7 @@ import pprint
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import which
-from typing import List, Union
+from typing import List, Optional, Union
 
 import click
 import toml
@@ -16,9 +16,48 @@ LINK_CONFIG_FILE_NAME = ".flash.toml"
 
 
 @dataclass
+class EntryFile:
+    name: str
+    rename: Optional[str]
+
+
+@dataclass
 class ManagerConf:
     name: str
-    package: str
+    package: Optional[str]
+
+
+# dacite doesn't support the `T1 | T2` syntax of Python 3.10
+ManagerConfs = list[Union[str, ManagerConf]]
+
+
+@dataclass
+class Entry:
+    cmd: str
+    install_cmds: Union[str, list[str]]
+    location: str
+    files: Union[list[str], list[EntryFile]]
+    managers: Optional[list[ManagerConf]]
+
+
+@dataclass
+class Dependency:
+    cmd: str
+    install_cmds: Optional[list[str]]
+    uninstall_cmds: Optional[list[str]]
+    managers: Optional[ManagerConfs]
+
+
+@dataclass
+class Config:
+    Entry: Entry
+    OptionalDeps: Optional[list[Dependency]]
+
+
+def unify_manager_confs(confs: ManagerConfs, package: str):
+    for i, v in enumerate(confs):
+        if isinstance(v, str):
+            confs[i] = ManagerConf(name=v, package=package)
 
 
 def read_config(entry_name) -> dict:
@@ -32,6 +71,11 @@ def read_config(entry_name) -> dict:
 
     with open(config_file) as f:
         return toml.loads(f.read())
+
+
+def warn(message):
+    click.secho("WARN", fg="yellow", nl=False)
+    click.echo(f": {message}")
 
 
 def error(message):
@@ -244,22 +288,22 @@ class LinkHandler:
 
         self.step("Optional dependencies")
         for dep in deps:
-            if "cmd" in dep:
-                cmd = dep["cmd"]
-                if "managers" in dep:
-                    managers = [from_dict(ManagerConf, m) for m in dep["managers"]]
-                    for m in managers:
-                        if m.package is None:
-                            m.package = cmd
-                    try:
-                        handle_package_managers(managers, self.link)
-                    except Exception as e:
-                        if not self.interactive:
-                            raise ClickException(e)
-                        error_msg(f"{e}, skip step")
-                else:
-                    install_cmds = dep.get("install_cmds", [])
-                    cmd_install_command(self.interactive, cmd, install_cmds)
+            dep = from_dict(Dependency, dep)
+            if dep.managers is not None:
+                unify_manager_confs(dep.managers, dep.cmd)
+                try:
+                    handle_package_managers(dep.managers, self.link)
+                except Exception as e:
+                    # Optional dependencies are not required
+                    error_msg(e)
+                    if self.interactive:
+                        if click.confirm("Abort?"):
+                            raise click.Abort
+            else:
+                cmds = dep.install_cmds if self.link else dep.uninstall_cmds
+                if not cmds:
+                    warn(f"Cant handle dependency: {dep}")
+                cmd_install_command(self.interactive, dep.cmd, cmds)
 
 
 def do_after_action(action):
