@@ -69,6 +69,7 @@ def link(name, interactive):
     cmd_install_command(interactive, cmd, install_cmds)
     handler.handle_optional_deps()
 
+    entry_dir = config_dir / name
     location = Path(config["Entry"]["location"]).expanduser()
     filenames: List[Union[str, dict]] = config["Entry"]["files"]
 
