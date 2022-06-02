@@ -248,6 +248,9 @@ class LinkHandler:
                 cmd = dep["cmd"]
                 if "managers" in dep:
                     managers = [from_dict(ManagerConf, m) for m in dep["managers"]]
+                    for m in managers:
+                        if m.package is None:
+                            m.package = cmd
                     try:
                         handle_package_managers(managers, self.link)
                     except Exception as e:
