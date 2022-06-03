@@ -54,10 +54,10 @@ class Config:
     OptionalDeps: Optional[list[Dependency]]
 
 
-def unify_manager_confs(confs: ManagerConfs, package: str):
-    for i, v in enumerate(confs):
-        if isinstance(v, str):
-            confs[i] = ManagerConf(name=v, package=package)
+def unify_manager_confs(cmd: str, confs: ManagerConfs):
+    return [
+        ManagerConf(name=v, package=cmd) if isinstance(v, str) else v for v in confs
+    ]
 
 
 def read_config(entry_name) -> dict:
@@ -218,34 +218,47 @@ def exec_command(cmd: str) -> int:
     return os.system(cmd)
 
 
-def handle_package_managers(managers: list[ManagerConf], link: bool = True):
-    if len(managers) == 0:
-        return
+def handle_package(package: str, manager: str, link: bool = True) -> str:
+    if manager in ["pacman", "yay"]:
+        op = "-S" if link else "-Rs"
+        cmd = f"{manager} {op} {package}"
+        if manager == "pacman":
+            cmd = f"sudo {cmd}"
+    elif manager == "brew":
+        cmd = f"{manager} {'install' if link else 'uninstall'} {package}"
+    else:
+        return f"unknown package manager: {manager}"
 
-    supported_managers = ["pacman", "yay", "brew"]
-    if len([m for m in managers if m.name in supported_managers]) == 0:
-        raise Exception("No supported package manager found")
+    if exec_command(cmd) != 0:
+        return f"failed to install {package} with {manager}"
+    return ""
 
-    found_managers = [m for m in managers if command_exits(m.name)]
-    if len(found_managers) == 0:
-        # TODO Support auto install package manager
-        raise Exception("No package manager found")
 
-    for m in found_managers:
-        if m.name in ["pacman", "yay"]:
-            op = "-S" if link else "-Rs"
-            cmd = f"{m.name} {op} {m.package}"
-            if m.name == "pacman":
-                cmd = f"sudo {cmd}"
-        elif m.name == "brew":
-            cmd = f"{m.name} {'install' if link else 'uninstall'} {m.package}"
+def handle_package_managers(
+    cmd: str, managers: list[ManagerConf] = [], link: bool = True
+):
+    """If MANAGERS is empty, use supported installed managers and CMD as package name."""
+    supported_managers = {"pacman", "yay", "brew"}
+    if not managers:
+        installed = [
+            ManagerConf(m, cmd) for m in supported_managers if command_exits(m)
+        ]
+    else:
+        supported = [m for m in managers if m.name in supported_managers]
+        if not supported:
+            return "no supported package manager found"
         else:
-            continue
+            installed = [m for m in supported if command_exits(m.name)]
 
-        if exec_command(cmd) != 0:
-            error_msg(f"Failed to install {m.package} with {m.name}")
+    if not installed:
+        return "no installed package manager found"
+    for m in installed:
+        p = m.package if m.package else cmd
+        if err := handle_package(p, m.name, link):
+            warn(err)
         else:
-            break
+            return ""
+    return "failed"
 
 
 # TODO User personal error type
@@ -288,22 +301,28 @@ class LinkHandler:
 
         self.step("Optional dependencies")
         for dep in deps:
-            dep = from_dict(Dependency, dep)
-            if dep.managers is not None:
-                unify_manager_confs(dep.managers, dep.cmd)
+            if isinstance(dep, str):
+                dep = Dependency(dep, None, None, None)
+            else:
+                dep = from_dict(Dependency, dep)
+            if dep.install_cmds:
+                cmds = dep.install_cmds if self.link else dep.uninstall_cmds
+                cmds = [] if cmds is None else cmds
+                if not cmds:
+                    warn(f"Cant handle dependency: {dep}")
+                    continue
+                cmd_install_command(self.interactive, dep.cmd, cmds)
+            else:
+                managers = dep.managers if dep.managers else []
+                managers = unify_manager_confs(dep.cmd, managers)
                 try:
-                    handle_package_managers(dep.managers, self.link)
+                    handle_package_managers(dep.cmd, managers, self.link)
                 except Exception as e:
                     # Optional dependencies are not required
                     error_msg(e)
                     if self.interactive:
                         if click.confirm("Abort?"):
                             raise click.Abort
-            else:
-                cmds = dep.install_cmds if self.link else dep.uninstall_cmds
-                if not cmds:
-                    warn(f"Cant handle dependency: {dep}")
-                cmd_install_command(self.interactive, dep.cmd, cmds)
 
 
 def do_after_action(action):
