@@ -51,6 +51,7 @@ class Dependency:
 @dataclass
 class Config:
     Entry: Entry
+    Deps: Optional[list[Dependency]]
     OptionalDeps: Optional[list[Dependency]]
 
 
@@ -112,6 +113,7 @@ def link(name, interactive):
     cmd = entry.get("cmd", "")
     install_cmds = entry.get("install_cmds", [])
     cmd_install_command(interactive, cmd, install_cmds)
+    handler.handle_deps()
     handler.handle_optional_deps()
 
     entry_dir = config_dir / name
@@ -289,10 +291,50 @@ class LinkHandler:
         self.step_num = 0
         self.link = link
 
+    def _handle_dep(self, d: str | dict):
+        if isinstance(d, str):
+            dep = Dependency(d, None, None, None)
+        else:
+            dep = from_dict(Dependency, d)
+        if dep.install_cmds:
+            cmds = dep.install_cmds if self.link else dep.uninstall_cmds
+            if cmds:
+                cmd_install_command(self.interactive, dep.cmd, cmds)
+            elif not self.interactive:
+                raise ClickException(f"cant handle dependency: {dep}")
+            elif not click.confirm(f"cant handle dependency: {dep}, continue?"):
+                raise click.Abort
+        else:
+            managers = dep.managers if dep.managers else []
+            managers = unify_manager_confs(dep.cmd, managers)
+            try:
+                handle_package_managers(dep.cmd, managers, self.link)
+            except Exception as e:
+                # We can try next manager
+                warn(e)
+                if self.interactive and click.confirm("Abort?"):
+                    raise click.Abort
+        if not self.link:
+            return
+        if not command_exits(dep.cmd):
+            if not self.interactive:
+                raise ClickException(f"{dep.cmd} not found")
+            if not click.confirm(f"{dep.cmd} not found, continue?"):
+                raise click.Abort
+
     def step(self, title):
         self.step_num += 1
         click.secho(f"STEP {self.step_num}", fg="green", nl=False)
         click.echo(f": {title}")
+
+    def handle_deps(self):
+        deps = self.config.get("Deps", [])
+        if len(deps) == 0:
+            return
+
+        self.step("Dependencies")
+        for dep in deps:
+            self._handle_dep(dep)
 
     def handle_optional_deps(self):
         deps = self.config.get("OptionalDeps", [])
@@ -301,28 +343,12 @@ class LinkHandler:
 
         self.step("Optional dependencies")
         for dep in deps:
-            if isinstance(dep, str):
-                dep = Dependency(dep, None, None, None)
-            else:
-                dep = from_dict(Dependency, dep)
-            if dep.install_cmds:
-                cmds = dep.install_cmds if self.link else dep.uninstall_cmds
-                cmds = [] if cmds is None else cmds
-                if not cmds:
-                    warn(f"Cant handle dependency: {dep}")
-                    continue
-                cmd_install_command(self.interactive, dep.cmd, cmds)
-            else:
-                managers = dep.managers if dep.managers else []
-                managers = unify_manager_confs(dep.cmd, managers)
-                try:
-                    handle_package_managers(dep.cmd, managers, self.link)
-                except Exception as e:
-                    # Optional dependencies are not required
-                    error_msg(e)
-                    if self.interactive:
-                        if click.confirm("Abort?"):
-                            raise click.Abort
+            try:
+                self._handle_dep(dep)
+            except click.Abort as e:
+                raise e
+            except Exception as e:
+                warn(e)
 
 
 def do_after_action(action):
